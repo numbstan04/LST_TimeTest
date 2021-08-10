@@ -1,5 +1,6 @@
 #include <time.h>
 #include <netinet/in.h>
+#include <iostream>
 
 #define BUFFER_SIZE 128
 /*
@@ -105,7 +106,83 @@ public:
         if (timer == nullptr) {
             return;
         }
+        util_timer* tmp = timer->next;
 
+        //如果该定时器在链表的为节点，或者该定时器的超时时间小于下一个节点的定时器时间，则不需要调整
+        if (!tmp || timer->expire < tmp->expire) {
+            return;
+        }
 
+        //如果目标定时器是链表的头节点，则将该定时器从链表中取出并重新插入
+        if (timer == head) {
+            head = head->next;
+            head->prev = nullptr;
+            timer->next = nullptr;
+            add_timer(timer, head);
+        }else
+        {
+            //若该定时器不是链表的头节点，则将该节点从链表取出，然后再插入到之后的链表当中去
+            timer->prev->next = timer->next;
+            timer->next->prev = timer->prev;
+            add_timer(timer, timer->next);
+        }
+    }
+
+    //将定时器从timer链表中删除
+    void del_timer(util_timer *timer){
+        if (!timer) {
+            return ;
+        }
+
+        //若该链表只有一个节点
+        if ((timer == head) && (timer == tail)) {
+            delete timer;
+            head = nullptr;
+            tail = nullptr;
+            return;
+        }
+        //若该定时器为链表的头节点并且不止一个节点，重置链表
+        if(timer == head) {
+            head = head->next;
+            head->prev = nullptr;
+            delete timer;
+            return ;
+        }
+        //若该定时器为链表的尾节点并且不止一个节点，重置链表
+        if (timer == tail) {
+            tail = tail->next;
+            tail->next = nullptr;
+            delete timer;
+            return;
+        }
+        //若该节点在链表中间
+        timer->prev->next = timer->next;
+        timer->next->prev = timer->prev;
+        delete timer;
+    }
+
+    //SIGALRM信号每次被触发就在其信号处理函数中执行tick函数，以处理链表上的任务
+    void tick(){
+        if (!head) {
+            return;
+        }
+        std::cout << "timer tick"<<std::endl;
+        time_t cur = time(nullptr);
+        //从头节点依次处理每一个定时器
+        util_timer* tmp = head;
+        while (tmp) {
+            //由于每个定时器都使用绝对时间作为超时值，因此将定时器的超时时间与当前系统时间进行对比，断定定时器是否到期
+            if (cur < tmp->expire) {
+                break;
+            }
+            //调用定时器的回调函数，执行回调任务
+            tmp->cb_func(tmp->user_data);
+            head = tmp->next;
+            if (head) {
+                head->prev = nullptr;
+            }
+            delete tmp;
+            tmp = head;
+        }
     }
 };
